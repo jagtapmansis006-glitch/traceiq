@@ -1,18 +1,22 @@
 ﻿{
-  "name": "TraceIQ Investigation Pipeline",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
         "path": "traceiq",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "*" }
+        "options": {
+          "allowedOrigins": "*"
+        }
       },
-      "id": "n1",
+      "id": "3ff9440f-459d-4094-9337-fa72e730d20f",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        -240,
+        96
+      ],
       "webhookId": "traceiq-investigate"
     },
     {
@@ -22,69 +26,196 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json.body) }}",
-        "options": { "timeout": 60000 }
+        "options": {
+          "timeout": 60000
+        }
       },
-      "id": "n2",
+      "id": "6f950a87-eba8-4d54-b145-f7db988394d0",
       "name": "Call Investigation Engine",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [240, 0],
+      "position": [
+        448,
+        96
+      ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst label = String(r.confidence ?? 'Low');\nconst pctMap = { high: 90, medium: 60, low: 30 };\nconst confidence_pct = pctMap[label.toLowerCase()] ?? 0;\nconst hyps = r.hypotheses_evaluated ?? [];\nconst evidence = hyps.filter(h => ['SUPPORTED','PLAUSIBLE'].includes(String(h.status).toUpperCase())).map(h => h.reason);\nreturn [{ json: {\n  incident_id: r.incident_id,\n  service: r.service,\n  status: r.status,\n  root_cause: r.root_cause,\n  confidence: label,\n  confidence_pct,\n  timeline: r.timeline ?? [],\n  hypotheses_evaluated: hyps,\n  evidence,\n  processed_at: new Date().toISOString()\n}}];"
+        "jsCode": "const r = $input.first().json;\nconst label = String(r.confidence ?? 'Low');\nconst pctMap = { high: 90, medium: 60, low: 30 };\nconst rawPct = Number(r.confidence_pct);\nconst confidence_pct = (r.confidence_pct != null && Number.isFinite(rawPct))\n  ? Math.max(0, Math.min(100, Math.round(rawPct)))\n  : (pctMap[label.toLowerCase()] ?? 0);\nconst hyps = r.hypotheses_evaluated ?? [];\nconst evidence = Array.isArray(r.evidence)\n  ? r.evidence\n  : hyps.filter(h => ['SUPPORTED', 'PLAUSIBLE'].includes(String(h.status).toUpperCase())).map(h => h.reason);\nreturn [{ json: {\n  incident_id: r.incident_id,\n  service: r.service,\n  status: r.status,\n  source: r.source ?? 'unknown',\n  root_cause: String(r.root_cause ?? '').replace(/\\s*\\(Error:[\\s\\S]*\\)\\s*$/, ''),\n  confidence: label,\n  confidence_pct,\n  timeline: r.timeline ?? [],\n  hypotheses_evaluated: hyps,\n  evidence,\n  recommended_actions: r.recommended_actions ?? [],\n  processed_at: new Date().toISOString()\n}}];"
       },
-      "id": "n3",
+      "id": "8626a31e-5426-4f37-9941-ef4f9593b026",
       "name": "Shape Dashboard Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, -80]
+      "position": [
+        688,
+        16
+      ]
     },
     {
       "parameters": {
         "jsCode": "return [{ json: {\n  incident_id: $('Webhook').first().json.body?.incident_id ?? null,\n  status: 'failed',\n  error: 'Investigation engine unreachable or returned an error',\n  processed_at: new Date().toISOString()\n}}];"
       },
-      "id": "n4",
+      "id": "461c8bb2-9262-4565-a7f9-c929f326aeda",
       "name": "Shape Error Output",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 120]
+      "position": [
+        688,
+        224
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
-        "options": { "responseCode": 200 }
+        "options": {
+          "responseCode": 200
+        }
       },
-      "id": "n5",
+      "id": "1d54dc3c-f709-4673-8a72-aeb46facd1d1",
       "name": "Respond Success",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [720, -80]
+      "position": [
+        928,
+        16
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
         "responseBody": "={{ JSON.stringify($json) }}",
-        "options": { "responseCode": 502 }
+        "options": {
+          "responseCode": 502
+        }
       },
-      "id": "n6",
+      "id": "a8670900-1017-4f28-a2d1-f9b18bcf9c57",
       "name": "Respond Error",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [720, 120]
+      "position": [
+        928,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $input.first().json.body || {};\nif (!String(b.incident_id || '').trim() || !String(b.service || '').trim()) {\n  throw new Error('incident_id and service are required');\n}\nreturn [{ json: $input.first().json }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        96
+      ],
+      "id": "9c459743-3d83-455e-8d79-ea0122fdc677",
+      "name": "Validate Input",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"status\":\"failed\",\"error\":\"incident_id and service are required\"}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        208,
+        112
+      ],
+      "id": "2f576ca4-cc6e-4371-b831-68836fef0731",
+      "name": "Respond to Webhook"
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Call Investigation Engine", "type": "main", "index": 0 }]] },
-    "Call Investigation Engine": {
+    "Webhook": {
       "main": [
-        [{ "node": "Shape Dashboard Output", "type": "main", "index": 0 }],
-        [{ "node": "Shape Error Output", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Shape Dashboard Output": { "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]] },
-    "Shape Error Output": { "main": [[{ "node": "Respond Error", "type": "main", "index": 0 }]] }
+    "Call Investigation Engine": {
+      "main": [
+        [
+          {
+            "node": "Shape Dashboard Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Shape Error Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Dashboard Output": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shape Error Output": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Call Investigation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        [
+          {
+            "node": "Call Investigation Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "e772a23b3ff3b26c48187e8b9dcb1c3d4b8707203d014c96eec35eac597aadd8"
   }
 }
