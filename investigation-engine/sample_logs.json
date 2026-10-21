@@ -1,0 +1,26 @@
+{
+  "incident_id": "INC-001",
+  "service": "checkout-service",
+  "timeline_events": [
+    {
+      "timestamp": "10:00:12",
+      "source": "deployment",
+      "message": "New deployment of checkout-service v1.4.2 completed successfully."
+    },
+    {
+      "timestamp": "10:03:45",
+      "source": "metrics",
+      "message": "HTTP 500 error rate surged by 300% on payment gateway calls."
+    },
+    {
+      "timestamp": "10:04:10",
+      "source": "database",
+      "message": "Database connection pool reached 100% capacity (max connections: 500)."
+    },
+    {
+      "timestamp": "10:04:50",
+      "source": "gateway",
+      "message": "API Gateway triggered circuit breaker due to downstream timeout."
+    }
+  ]
+}

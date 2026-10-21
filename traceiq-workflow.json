@@ -1,0 +1,90 @@
+﻿{
+  "name": "TraceIQ Investigation Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "traceiq",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "n1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "traceiq-investigate"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fastapi:8000/api/investigate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "n2",
+      "name": "Call Investigation Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.first().json;\nconst label = String(r.confidence ?? 'Low');\nconst pctMap = { high: 90, medium: 60, low: 30 };\nconst confidence_pct = pctMap[label.toLowerCase()] ?? 0;\nconst hyps = r.hypotheses_evaluated ?? [];\nconst evidence = hyps.filter(h => ['SUPPORTED','PLAUSIBLE'].includes(String(h.status).toUpperCase())).map(h => h.reason);\nreturn [{ json: {\n  incident_id: r.incident_id,\n  service: r.service,\n  status: r.status,\n  root_cause: r.root_cause,\n  confidence: label,\n  confidence_pct,\n  timeline: r.timeline ?? [],\n  hypotheses_evaluated: hyps,\n  evidence,\n  processed_at: new Date().toISOString()\n}}];"
+      },
+      "id": "n3",
+      "name": "Shape Dashboard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  incident_id: $('Webhook').first().json.body?.incident_id ?? null,\n  status: 'failed',\n  error: 'Investigation engine unreachable or returned an error',\n  processed_at: new Date().toISOString()\n}}];"
+      },
+      "id": "n4",
+      "name": "Shape Error Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 120]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "n5",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, -80]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": { "responseCode": 502 }
+      },
+      "id": "n6",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [720, 120]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Call Investigation Engine", "type": "main", "index": 0 }]] },
+    "Call Investigation Engine": {
+      "main": [
+        [{ "node": "Shape Dashboard Output", "type": "main", "index": 0 }],
+        [{ "node": "Shape Error Output", "type": "main", "index": 0 }]
+      ]
+    },
+    "Shape Dashboard Output": { "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]] },
+    "Shape Error Output": { "main": [[{ "node": "Respond Error", "type": "main", "index": 0 }]] }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "incident_id": "INC-002",
+  "service": "auth-service",
+  "timeline_events": [
+    {
+      "timestamp": "14:15:00",
+      "source": "redis",
+      "message": "Redis session store memory utilization reached 95% threshold."
+    },
+    {
+      "timestamp": "14:18:22",
+      "source": "api-gateway",
+      "message": "Gateway returning 504 Gateway Timeout for login token validation requests."
+    },
+    {
+      "timestamp": "14:20:05",
+      "source": "database",
+      "message": "PostgreSQL query queue depth normal, indicating auth service is failing upstream of DB."
+    }
+  ]
+}

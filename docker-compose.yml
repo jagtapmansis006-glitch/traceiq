@@ -1,0 +1,20 @@
+﻿services:
+  fastapi:
+    build: ./investigation-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-nvapi-vRApnmRobG5iafHsSAUkzL26yyC5r-0DoutUU}
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5678:5678"
+    environment:
+      - GENERIC_TIMEZONE=Asia/Kolkata
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - fastapi
+volumes:
+  n8n_data:
