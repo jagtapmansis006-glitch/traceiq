@@ -1,0 +1,31 @@
+{
+  "incident_id": "INC-004",
+  "service": "api-gateway",
+  "timeline_events": [
+    {
+      "timestamp": "08:00:00",
+      "source": "cert-monitor",
+      "message": "Auto-renewal job for the TLS certificate of api.internal.example.com failed; certificate expires in 1 hour."
+    },
+    {
+      "timestamp": "09:00:00",
+      "source": "cert-monitor",
+      "message": "TLS certificate for api.internal.example.com expired."
+    },
+    {
+      "timestamp": "09:00:42",
+      "source": "api-gateway",
+      "message": "TLS handshake failures surged to 85% on upstream calls: 'certificate has expired'."
+    },
+    {
+      "timestamp": "09:02:15",
+      "source": "metrics",
+      "message": "HTTP 503 error rate reached 70% on requests routed through the gateway."
+    },
+    {
+      "timestamp": "09:03:30",
+      "source": "alerting",
+      "message": "Alert triggered: upstream health checks failing for 4 of 5 backend services with TLS errors."
+    }
+  ]
+}
