@@ -4,7 +4,7 @@
     ports:
       - "8000:8000"
     environment:
-      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-nvapi-vRApnmRobG5iafHsSAUkzL26yyC5r-0DoutUU}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-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}
   n8n:
     image: n8nio/n8n:latest
     ports:
