@@ -1,4 +1,5 @@
-﻿{
+{
+  "name": "TraceIQ Investigation Pipeline",
   "nodes": [
     {
       "parameters": {
@@ -35,14 +36,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        448,
-        96
+        416,
+        80
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "jsCode": "const r = $input.first().json;\nconst label = String(r.confidence ?? 'Low');\nconst pctMap = { high: 90, medium: 60, low: 30 };\nconst rawPct = Number(r.confidence_pct);\nconst confidence_pct = (r.confidence_pct != null && Number.isFinite(rawPct))\n  ? Math.max(0, Math.min(100, Math.round(rawPct)))\n  : (pctMap[label.toLowerCase()] ?? 0);\nconst hyps = r.hypotheses_evaluated ?? [];\nconst evidence = Array.isArray(r.evidence)\n  ? r.evidence\n  : hyps.filter(h => ['SUPPORTED', 'PLAUSIBLE'].includes(String(h.status).toUpperCase())).map(h => h.reason);\nreturn [{ json: {\n  incident_id: r.incident_id,\n  service: r.service,\n  status: r.status,\n  source: r.source ?? 'unknown',\n  root_cause: String(r.root_cause ?? '').replace(/\\s*\\(Error:[\\s\\S]*\\)\\s*$/, ''),\n  confidence: label,\n  confidence_pct,\n  timeline: r.timeline ?? [],\n  hypotheses_evaluated: hyps,\n  evidence,\n  recommended_actions: r.recommended_actions ?? [],\n  processed_at: new Date().toISOString()\n}}];"
+        "jsCode": "const r = $input.first().json;\nconst label = String(r.confidence ?? 'Low');\nconst pctMap = { high: 90, medium: 60, low: 30 };\nconst rawPct = Number(r.confidence_pct);\nconst confidence_pct = (r.confidence_pct != null && Number.isFinite(rawPct))\n  ? Math.max(0, Math.min(100, Math.round(rawPct)))\n  : (pctMap[label.toLowerCase()] ?? 0);\nconst hyps = r.hypotheses_evaluated ?? [];\nconst evidence = Array.isArray(r.evidence)\n  ? r.evidence\n  : hyps.filter(h => ['SUPPORTED', 'PLAUSIBLE'].includes(String(h.status).toUpperCase())).map(h => h.reason);\nconst out = {\n  incident_id: r.incident_id,\n  service: r.service,\n  status: r.status,\n  source: r.source ?? 'unknown',\n  root_cause: String(r.root_cause ?? '').replace(/\\s*\\(Error:[\\s\\S]*\\)\\s*$/, ''),\n  confidence: label,\n  confidence_pct,\n  timeline: r.timeline ?? [],\n  hypotheses_evaluated: hyps,\n  evidence,\n  recommended_actions: r.recommended_actions ?? [],\n  processed_at: new Date().toISOString()\n};\nif (r.similar_past_incident != null) out.similar_past_incident = r.similar_past_incident;\nif (r.memory_source != null) out.memory_source = r.memory_source;\nreturn [{ json: out }];"
       },
       "id": "8626a31e-5426-4f37-9941-ef4f9593b026",
       "name": "Shape Dashboard Output",
@@ -125,13 +126,14 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.5,
       "position": [
-        208,
-        112
+        192,
+        256
       ],
       "id": "2f576ca4-cc6e-4371-b831-68836fef0731",
       "name": "Respond to Webhook"
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook": {
       "main": [
@@ -204,18 +206,23 @@
     },
     "Respond to Webhook": {
       "main": [
-        [
-          {
-            "node": "Call Investigation Engine",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     }
   },
-  "pinData": {},
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "9bc291af-c771-4814-b482-e5705f9d196e",
   "meta": {
     "instanceId": "e772a23b3ff3b26c48187e8b9dcb1c3d4b8707203d014c96eec35eac597aadd8"
-  }
+  },
+  "nodeGroups": [],
+  "id": "dKahgEvqcsump8Dh",
+  "tags": []
 }
