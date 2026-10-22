@@ -1,0 +1,107 @@
+{
+  "name": "TraceIQ Health",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "traceiq-health",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*"
+        }
+      },
+      "id": "h1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "traceiq-health-hook"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://fastapi:8000/health",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "h2",
+      "name": "Ping Engine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ n8n: \"up\", engine: \"up\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "h3",
+      "name": "Respond Up",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ n8n: \"up\", engine: \"down\" }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "h4",
+      "name": "Respond Down",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ping Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Engine": {
+      "main": [
+        [
+          {
+            "node": "Respond Up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Down",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

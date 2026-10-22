@@ -5,6 +5,9 @@
       - "8000:8000"
     environment:
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
+      - TRACEIQ_MEMORY_FILE=/data/memory_store.json
+    volumes:
+      - traceiq_memory:/data
 
   n8n:
     image: n8nio/n8n:latest
@@ -20,3 +23,4 @@
 
 volumes:
   n8n_data:
+  traceiq_memory:

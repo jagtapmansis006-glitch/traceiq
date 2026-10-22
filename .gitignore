@@ -2,3 +2,7 @@
 __pycache__/
 test.json
 direct.json
+.env 
+backup/
+body*.json
+investigation-engine/main_OLD.py

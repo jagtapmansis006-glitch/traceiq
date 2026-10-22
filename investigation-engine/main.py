@@ -6,19 +6,24 @@ import copy
 import hashlib
 import json
 import os
+import re
 import time
 import threading
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Reads NVIDIA_API_KEY from the .env file (or from the environment inside Docker)
+from memory import (
+    save_incident,
+    recall_similar,
+    list_incidents,
+    clear_memory,
+    MEMORY_SOURCE,
+)
+
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# ---------------------------------------------------------------
-# NVIDIA client (key comes from .env, never hardcode it here)
-# ---------------------------------------------------------------
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
 
 client = None
@@ -32,27 +37,25 @@ if NVIDIA_API_KEY:
 else:
     print("WARNING: NVIDIA_API_KEY not found - using fallback responses only.")
 
-# Models to try, in order. Only models listed as live for your key are used.
 PREFERRED_MODELS = [
-    "nvidia/nemotron-3.5-super-vl-120b-a12b",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "mistralai/mistral-nemotron",
+    "meta/llama-3.1-70b-instruct",
+    "meta/llama-3.1-8b-instruct",
 ]
 
-# Skip models that are not plain chat models
-SKIP_WORDS = ("embed", "rerank", "guard", "safety", "reward", "vision",
+SKIP_WORDS = ("embed", "rerank", "guard", "safety", "reward", "vision", "-vl",
               "clip", "parse", "retriev", "whisper", "tts", "asr", "image",
               "diffusion", "code", "coder")
 
-TIME_BUDGET_SECONDS = 50   # must stay under the n8n timeout (60 s)
+TIME_BUDGET_SECONDS = 50
 
-BAD_MODELS = set()      # models that returned 404/410 (retired / no access)
-WORKING_MODEL = None    # last model that worked
+BAD_MODELS = set()
+WORKING_MODEL = None
 _model_cache = {"time": 0.0, "ids": []}
 
-# Saved AI answers, so repeat calls (and the demo) are instant
 LLM_CACHE = {}
-LAST_ACTIONS = {}       # last recommended actions per incident
+LAST_ACTIONS = {}
 
 SAMPLE_FILES = {
     "INC-001": "sample_logs.json",
@@ -61,7 +64,6 @@ SAMPLE_FILES = {
     "INC-004": "sample_logs_4.json",
 }
 
-# Services used for the startup warm-up
 WARMUP_TARGETS = [
     ("INC-001", "checkout-service"),
     ("INC-002", "auth-service"),
@@ -69,16 +71,21 @@ WARMUP_TARGETS = [
     ("INC-004", "api-gateway"),
 ]
 
-# Checks for the built-in sample incidents only (not for custom logs)
 REQUIRED_WORDS = {
-    "INC-001": ["retry", "retries"],
+    "INC-001": ["retry", "retries", "retried", "retrying"],
     "INC-002": ["redis"],
     "INC-003": ["stripe"],
     "INC-004": ["cert", "tls"],
 }
 FORBIDDEN_WORDS = {
-    "INC-001": ["leak", "introduced", "bug"],
+    "INC-001": ["leak", "introduced", "bug", "deployment", "v1.4.2"],
 }
+# The root cause must START with the earliest abnormal event: the first
+# timestamp mentioned in the root_cause text has to be this one.
+REQUIRED_FIRST_TS = {
+    "INC-001": "10:03:10",
+}
+TS_PATTERN = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 
 
 def confidence_label(pct: int) -> str:
@@ -89,9 +96,6 @@ def confidence_label(pct: int) -> str:
     return "Low"
 
 
-# ---------------------------------------------------------------
-# Fallback responses (demo safety net)
-# ---------------------------------------------------------------
 FALLBACKS = {
     "INC-001": {
         "root_cause": "A 300% surge in client retries at 10:03:10 caused HTTP 500 errors, which exhausted the database connection pool and tripped the API Gateway circuit breaker.",
@@ -169,7 +173,6 @@ FALLBACKS = {
     },
 }
 
-# Used when the AI fails on custom logs (no sample answer exists for them)
 GENERIC_FALLBACK = {
     "root_cause": "The engine could not complete an automated analysis of these logs. Review the timeline manually.",
     "confidence_pct": 30,
@@ -184,9 +187,6 @@ for _fb in list(FALLBACKS.values()) + [GENERIC_FALLBACK]:
     _fb["confidence"] = confidence_label(_fb["confidence_pct"])
 
 
-# ---------------------------------------------------------------
-# Request models
-# ---------------------------------------------------------------
 class IncidentRequest(BaseModel):
     incident_id: str
     service: str
@@ -203,9 +203,6 @@ class VerifyRequest(BaseModel):
     incident_id: str
 
 
-# ---------------------------------------------------------------
-# AI answer models (Pydantic validation)
-# ---------------------------------------------------------------
 class Hypothesis(BaseModel):
     id: str
     title: str
@@ -228,9 +225,6 @@ class LLMResult(BaseModel):
     recommended_actions: List[Action]
 
 
-# ---------------------------------------------------------------
-# Simulated incident state (for remediate / verify)
-# ---------------------------------------------------------------
 INITIAL_STATES = {
     "INC-001": {"db_pool_pct": 100, "error_rate_pct": 42},
     "INC-002": {"redis_memory_pct": 95, "timeout_rate_pct": 30},
@@ -253,11 +247,7 @@ def reset_state(incident_id: str):
     incident_states[incident_id] = copy.deepcopy(INITIAL_STATES.get(incident_id, GENERIC_INITIAL))
 
 
-# ---------------------------------------------------------------
-# Loading and normalising logs
-# ---------------------------------------------------------------
 def load_incident_data(incident_id: str):
-    """Loads the sample log file for a known incident ID."""
     filename = SAMPLE_FILES.get(incident_id)
     if not filename:
         raise HTTPException(
@@ -275,12 +265,11 @@ def load_incident_data(incident_id: str):
     except json.JSONDecodeError as e:
         raise HTTPException(
             status_code=500,
-            detail=f"{filename} has a JSON syntax error: {e}. Check for a missing comma or bracket.",
+            detail=f"{filename} has a JSON syntax error: {e}.",
         )
 
 
 def normalize_logs(logs) -> list:
-    """Turns request logs (strings or objects) into timeline events."""
     if isinstance(logs, str):
         logs = logs.splitlines()
 
@@ -317,7 +306,6 @@ def normalize_logs(logs) -> list:
 
 
 def get_events(incident_id: str, logs):
-    """Returns (sorted events, used_sample). Uses request logs if given, else the sample file."""
     events = normalize_logs(logs) if logs else []
     if events:
         return sorted(events, key=lambda x: x["timestamp"]), False
@@ -326,9 +314,6 @@ def get_events(incident_id: str, logs):
     return sorted(data["timeline_events"], key=lambda x: x["timestamp"]), True
 
 
-# ---------------------------------------------------------------
-# Prompt and AI calling
-# ---------------------------------------------------------------
 def timeline_to_text(events: list) -> str:
     return "\n".join(
         [f"[{e['timestamp']}] ({e['source'].upper()}): {e['message']}" for e in events]
@@ -344,34 +329,38 @@ Timeline:
 {timeline_to_text(events)}
 
 STRICT RULES:
-1. Use ONLY facts stated in the timeline above. Do NOT invent causes, components, metrics or events that are not in the timeline (for example, do not claim a "leak" unless a log line says so).
+1. Use ONLY facts stated in the timeline above. Do NOT invent causes, components, metrics or events.
 2. Every "reason" must quote at least one exact timestamp from the timeline as evidence.
-3. Calculate time gaps carefully from the timestamps. Do not guess them.
-4. A cause must happen BEFORE its effects. Reject hypotheses where the timing does not fit.
-5. If the evidence does not prove the cause, give a confidence_pct below 70 and say what is unknown.
-6. A deployment that happened earlier is only a correlation. Do NOT call a deployment the cause unless a log line shows the deployment itself failing or changing behavior.
-7. Never write phrases like "introduced code changes" or "introduced a bug" unless a log line says so.
-8. The root cause must be the EARLIEST abnormal event in the chain that can explain the later ones. Never name a later event (such as pool exhaustion) as the root cause if an earlier abnormal event (such as a traffic or retry surge) came first and could have produced it.
-9. Exactly ONE hypothesis must describe the root cause you name and have status "SUPPORTED". Its title must restate that root cause in plain words. The other two hypotheses must be alternative explanations that are REJECTED or PLAUSIBLE. Never mark all three hypotheses REJECTED.
-10. "evidence" must contain 3 to 5 strings, each copying one timeline line with its exact timestamp, in the form "[timestamp] message".
-11. "recommended_actions" must contain 1 or 2 concrete fixes that address the root cause. Each has an "id" ("A1", "A2"), a one-sentence "action", a "risk" ("Low", "Medium" or "High"), and a one-sentence "rollback" that says how to undo it.
+3. Calculate time gaps carefully from the timestamps.
+4. A cause must happen BEFORE its effects.
+5. If evidence does not prove cause, give confidence_pct below 70.
+6. A deployment that happened earlier is only a correlation.
+7. The root cause must be the EARLIEST abnormal event in the chain.
+8. Exactly 3 hypotheses, and exactly ONE of them must have status "SUPPORTED" (the others "REJECTED" or "PLAUSIBLE").
+9. "evidence" must contain 3 to 5 strings in form "[timestamp] message".
+10. "recommended_actions" must contain 1 or 2 concrete fixes.
+11. A routine event that completed successfully (for example "deployment completed successfully") is NOT abnormal. Find the first event that is actually abnormal (a surge, spike, failure or saturation).
+12. Write "root_cause" as one sentence that STARTS with that earliest abnormal event and its timestamp, then lists the later effects in chronological order. Never start the sentence with a later effect.
 
-12. A deployment log that says it "completed successfully" is NOT an abnormal event. Start the chain at the first log line that reports abnormal behaviour (a surge, spike, failure, expiry or saturation).
-
-Example of the exact JSON shape (the values are placeholders, write your own from the timeline):
-{{"root_cause": "...", "confidence_pct": 80, "hypotheses_evaluated": [{{"id": "H1", "title": "...", "status": "REJECTED", "reason": "[hh:mm:ss] ..."}}, {{"id": "H2", "title": "...", "status": "SUPPORTED", "reason": "[hh:mm:ss] ..."}}, {{"id": "H3", "title": "...", "status": "PLAUSIBLE", "reason": "[hh:mm:ss] ..."}}], "evidence": ["[hh:mm:ss] ..."], "recommended_actions": [{{"id": "A1", "action": "...", "risk": "Low", "rollback": "..."}}]}}
-
-Respond with ONLY a valid JSON object (no explanation, no markdown) with these keys:
-- "root_cause": one sentence, based only on timeline evidence
-- "confidence_pct": integer from 0 to 100
-- "hypotheses_evaluated": a list of exactly 3 objects, each with "id" (H1, H2, H3), "title", "status" (REJECTED, PLAUSIBLE, or SUPPORTED), and "reason" (one short sentence quoting timestamps)
-- "evidence": list of strings (rule 10)
-- "recommended_actions": list of objects (rule 11)
+Respond with ONLY a valid JSON object, no markdown, using EXACTLY these key names:
+{{
+  "root_cause": "one sentence naming the earliest cause and its effects",
+  "confidence_pct": 85,
+  "hypotheses_evaluated": [
+    {{"id": "H1", "title": "short hypothesis name", "status": "REJECTED", "reason": "[HH:MM:SS] why, quoting a timestamp"}},
+    {{"id": "H2", "title": "short hypothesis name", "status": "SUPPORTED", "reason": "[HH:MM:SS] why, quoting a timestamp"}},
+    {{"id": "H3", "title": "short hypothesis name", "status": "PLAUSIBLE", "reason": "[HH:MM:SS] why, quoting a timestamp"}}
+  ],
+  "evidence": ["[HH:MM:SS] message from the timeline"],
+  "recommended_actions": [
+    {{"id": "A1", "action": "concrete fix", "risk": "Low", "rollback": "how to undo the fix"}}
+  ]
+}}
+"risk" must be one of Low, Medium, High. "rollback" must be a text string.
 """
 
 
 def extract_json(text: str) -> dict:
-    """Pulls the JSON object out of the model's reply, even with extra text around it."""
     start = text.find("{")
     end = text.rfind("}") + 1
     if start == -1 or end == 0:
@@ -379,14 +368,127 @@ def extract_json(text: str) -> dict:
     return json.loads(text[start:end])
 
 
+# ---------------------------------------------------------------------------
+# Tolerant normalization of the model's JSON (fixes key-name drift such as
+# "hypothesis" / "hypothesis_id" instead of "title" / "id", and rollback: false)
+# ---------------------------------------------------------------------------
+
+def _text(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, (list, tuple)):
+        return "; ".join(t for t in (_text(v) for v in value) if t)
+    if isinstance(value, dict):
+        return "; ".join(t for t in (_text(v) for v in value.values()) if t)
+    return str(value).strip()
+
+
+def _pick(d: dict, keys):
+    for k in keys:
+        v = d.get(k)
+        if v not in (None, "", [], {}):
+            return v
+    return None
+
+
+def _norm_status(value) -> str:
+    s = str(value or "").upper()
+    if "REJECT" in s or "RULED" in s or "DISPROV" in s:
+        return "REJECTED"
+    if "SUPPORT" in s or "CONFIRM" in s or "ROOT" in s or "ACCEPT" in s or "LIKELY" in s:
+        return "SUPPORTED"
+    return "PLAUSIBLE"
+
+
+def _norm_risk(value) -> str:
+    s = str(value or "").strip().lower()
+    if s.startswith("low"):
+        return "Low"
+    if s.startswith("high") or s.startswith("crit"):
+        return "High"
+    return "Medium"
+
+
+def normalize_llm_output(raw: dict) -> dict:
+    raw = dict(raw)
+
+    if not raw.get("root_cause"):
+        raw["root_cause"] = _text(_pick(raw, ["rootCause", "root", "cause", "conclusion"]))
+
+    if "confidence_pct" not in raw:
+        alt = _pick(raw, ["confidence", "confidence_percent", "confidence_percentage"])
+        if alt is not None:
+            raw["confidence_pct"] = alt
+
+    hyps = _pick(raw, ["hypotheses_evaluated", "hypotheses", "hypothesis_list"]) or []
+    if isinstance(hyps, dict):
+        hyps = list(hyps.values())
+    fixed_h = []
+    for i, h in enumerate(hyps):
+        if isinstance(h, str):
+            h = {"title": h}
+        if not isinstance(h, dict):
+            continue
+        title = _text(_pick(h, ["title", "hypothesis", "name", "hypothesis_title", "description"])) \
+            or f"Hypothesis {i + 1}"
+        reason = _text(_pick(h, ["reason", "reasoning", "explanation", "rationale",
+                                 "justification", "evidence"])) or "No reason given."
+        fixed_h.append({
+            "id": f"H{i + 1}",
+            "title": title,
+            "status": _norm_status(_pick(h, ["status", "verdict", "result", "conclusion"])),
+            "reason": reason,
+        })
+    raw["hypotheses_evaluated"] = fixed_h
+
+    evidence = raw.get("evidence") or []
+    if isinstance(evidence, str):
+        evidence = [ln for ln in evidence.splitlines() if ln.strip()]
+    fixed_e = []
+    for e in evidence:
+        if isinstance(e, dict):
+            ts = _text(e.get("timestamp"))
+            msg = _text(_pick(e, ["message", "event", "text", "description"]))
+            line = f"[{ts}] {msg}" if ts else msg
+        else:
+            line = _text(e)
+        if line:
+            fixed_e.append(line)
+    raw["evidence"] = fixed_e[:5]
+
+    actions = _pick(raw, ["recommended_actions", "actions", "recommendations"]) or []
+    if isinstance(actions, dict):
+        actions = list(actions.values())
+    fixed_a = []
+    for a in actions:
+        if isinstance(a, str):
+            a = {"action": a}
+        if not isinstance(a, dict):
+            continue
+        text = _text(_pick(a, ["action", "description", "fix", "recommended_action",
+                               "step", "recommendation", "title"]))
+        if not text:
+            continue
+        rollback = _text(_pick(a, ["rollback", "rollback_plan", "rollback_steps", "undo"]))
+        fixed_a.append({
+            "id": f"A{len(fixed_a) + 1}",
+            "action": text,
+            "risk": _norm_risk(_pick(a, ["risk", "risk_level"])),
+            "rollback": rollback or "Revert the change to the previous configuration",
+        })
+    raw["recommended_actions"] = fixed_a[:2]
+
+    return raw
+
+
 def validate_result(incident_id: str, raw: dict, check_words: bool) -> dict:
-    """Validates and cleans the AI answer. Raises ValueError if it is not good enough."""
     if not isinstance(raw, dict):
         raise ValueError("Answer is not a JSON object")
 
-    raw = dict(raw)
+    raw = normalize_llm_output(raw)
 
-    # --- normalise common model quirks ---
     pct = raw.get("confidence_pct")
     if isinstance(pct, str):
         pct = pct.replace("%", "").strip()
@@ -396,64 +498,49 @@ def validate_result(incident_id: str, raw: dict, check_words: bool) -> dict:
         raise ValueError("confidence_pct is missing or not a number")
     if 0 < pct <= 1:
         pct *= 100
-    raw["confidence_pct"] = int(round(pct))
+    raw["confidence_pct"] = max(0, min(100, int(round(pct))))
 
-    hyps = raw.get("hypotheses_evaluated")
-    if isinstance(hyps, list) and len(hyps) > 3:
-        # keep the SUPPORTED one, then fill up to 3 with the others
-        sup = [h for h in hyps if isinstance(h, dict) and str(h.get("status", "")).upper() == "SUPPORTED"][:1]
-        rest = [h for h in hyps if not any(h is x for x in sup)]
-        hyps = sup + rest[:3 - len(sup)]
-        raw["hypotheses_evaluated"] = hyps
-    for i, h in enumerate(raw.get("hypotheses_evaluated") or []):
-        if isinstance(h, dict):
-            h["id"] = f"H{i + 1}"
-            h["status"] = str(h.get("status", "")).upper()
-            if not h.get("title"):
-                h["title"] = str(h.get("hypothesis") or h.get("name") or h.get("cause") or "")
-            if not h.get("reason"):
-                h["reason"] = str(h.get("explanation") or h.get("rationale") or h.get("evidence") or "")
-
-    if isinstance(raw.get("evidence"), list):
-        raw["evidence"] = [e if isinstance(e, str) else json.dumps(e) for e in raw["evidence"]]
-
-    for i, a in enumerate(raw.get("recommended_actions") or []):
-        if isinstance(a, dict):
-            a["id"] = f"A{i + 1}"
-            a["risk"] = str(a.get("risk", "")).capitalize()
-            if not a.get("action"):
-                a["action"] = str(a.get("description") or a.get("fix") or a.get("step") or "")
-            if not a.get("rollback"):
-                a["rollback"] = str(a.get("rollback_plan") or "Revert the change to the previous configuration")
-
-    # --- Pydantic structure check ---
     result = LLMResult.model_validate(raw).model_dump()
 
-    # --- content checks ---
     if len(result["hypotheses_evaluated"]) != 3:
         raise ValueError("Need exactly 3 hypotheses")
     statuses = [h["status"] for h in result["hypotheses_evaluated"]]
     if statuses.count("SUPPORTED") != 1:
         raise ValueError("Exactly one hypothesis must be SUPPORTED")
-    if not 1 <= len(result["recommended_actions"]) <= 3:
-        raise ValueError("Need 1 to 3 recommended actions")
-    if len(result["evidence"]) < 1:
-        raise ValueError("Evidence list is empty")
+    if not result["recommended_actions"]:
+        raise ValueError("Need at least one recommended action")
 
     if check_words:
         root = result["root_cause"].lower()
         required = REQUIRED_WORDS.get(incident_id)
         if required and not any(w in root for w in required):
+            print(f"    rejected root_cause was: {result['root_cause'][:200]}")
             raise ValueError("Root cause does not match the log evidence")
         if any(w in root for w in FORBIDDEN_WORDS.get(incident_id, [])):
+            print(f"    rejected root_cause was: {result['root_cause'][:200]}")
             raise ValueError("Root cause contains an unsupported claim")
+
+        # Cause must come BEFORE its effects: the first timestamp cited in the
+        # root cause must be the earliest one it cites (and the expected one
+        # for the sample incidents that define it).
+        stamps = TS_PATTERN.findall(result["root_cause"])
+        if stamps:
+            if stamps[0] != min(stamps):
+                print(f"    rejected root_cause was: {result['root_cause'][:200]}")
+                raise ValueError("Root cause starts with an effect, not the earliest event")
+            expected = REQUIRED_FIRST_TS.get(incident_id)
+            if expected and stamps[0] != expected:
+                print(f"    rejected root_cause was: {result['root_cause'][:200]}")
+                raise ValueError(f"Root cause must start with the earliest abnormal event at {expected}")
+        elif incident_id in REQUIRED_FIRST_TS:
+            print(f"    rejected root_cause was: {result['root_cause'][:200]}")
+            raise ValueError("Root cause must cite the timestamp of the earliest abnormal event")
 
     result["confidence"] = confidence_label(result["confidence_pct"])
     return result
 
 
 def get_candidate_models():
-    """Asks NVIDIA which models are live, then returns a SHORT ordered list."""
     now = time.time()
     if _model_cache["ids"] and now - _model_cache["time"] < 600:
         return _model_cache["ids"]
@@ -465,9 +552,8 @@ def get_candidate_models():
         print("--- Could not list models:", str(e)[:150])
 
     ordered = [m for m in PREFERRED_MODELS if (not live or m in live)]
-    extras = [m for m in live
-              if m not in ordered and not any(w in m.lower() for w in SKIP_WORDS)]
-    ordered += extras[:2]   # at most 2 extra models, to avoid long loops
+    extras = [m for m in live if m not in ordered and not any(w in m.lower() for w in SKIP_WORDS)]
+    ordered += extras[:2]
 
     _model_cache["time"] = now
     _model_cache["ids"] = ordered
@@ -475,7 +561,6 @@ def get_candidate_models():
 
 
 def call_model(model_name: str, prompt: str):
-    """Calls one model. Turns off 'thinking' mode for speed; retries without it if rejected."""
     kwargs = dict(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
@@ -488,14 +573,12 @@ def call_model(model_name: str, prompt: str):
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
     except Exception as e:
-        s = str(e)
-        if "400" in s or "422" in s:
+        if "400" in str(e) or "422" in str(e):
             return client.chat.completions.create(**kwargs)
         raise
 
 
 def ask_llm(prompt: str, deadline: float) -> dict:
-    """Tries models until one returns JSON; remembers the working one."""
     global WORKING_MODEL
 
     if client is None:
@@ -508,7 +591,7 @@ def ask_llm(prompt: str, deadline: float) -> dict:
 
     last_error = None
     for model_name in candidates:
-        attempts = 2 if model_name == WORKING_MODEL else 1   # retry the known-good model once
+        attempts = 2 if model_name == WORKING_MODEL else 1
         for _ in range(attempts):
             if time.time() > deadline:
                 raise RuntimeError("Time budget exceeded")
@@ -520,30 +603,36 @@ def ask_llm(prompt: str, deadline: float) -> dict:
                 print(f"--- LLM OK using model: {model_name} ---")
                 return result
             except Exception as e:
-                print(f"--- Model {model_name} failed: {str(e)[:150]}")
                 last_error = e
                 if "404" in str(e) or "410" in str(e):
                     BAD_MODELS.add(model_name)
-                    break   # no point retrying a dead model
+                    break
 
     raise RuntimeError(f"All models failed. Last error: {last_error}")
 
 
 def ask_llm_checked(incident_id: str, prompt: str, check_words: bool) -> dict:
-    """Asks the AI, validates the answer, and retries ONCE if it is not good enough."""
     deadline = time.time() + TIME_BUDGET_SECONDS
+    current_prompt = prompt
     for attempt in (1, 2):
-        raw = ask_llm(prompt, deadline)
+        raw = ask_llm(current_prompt, deadline)
         try:
             return validate_result(incident_id, raw, check_words)
         except Exception as e:
-            print(f"--- Answer for {incident_id} rejected (attempt {attempt}/2): {str(e)[:150]}")
+            msg = str(e).replace("\n", " ")
+            print(f"--- Answer for {incident_id} rejected (attempt {attempt}/2): {msg[:200]}")
+            if isinstance(raw, dict):
+                print(f"    top-level keys returned: {list(raw.keys())}")
+            current_prompt = (
+                prompt
+                + f"\n\nYour previous answer was rejected: {msg[:300]}\n"
+                + "Return ONLY JSON using exactly the key names shown in the example."
+            )
     raise RuntimeError(f"AI answer for {incident_id} failed validation after retry")
 
 
 def investigate_core(incident_id: str, service: str, events: list,
                      timestamp: Optional[str], used_sample: bool):
-    """Returns (result, source). Uses the cache, then the AI, then the fallback."""
     digest = hashlib.md5(timeline_to_text(events).encode("utf-8")).hexdigest()
     cache_key = (incident_id, service, digest)
 
@@ -563,14 +652,13 @@ def investigate_core(incident_id: str, service: str, events: list,
 
 
 def warmup():
-    """Runs in the background at startup: asks the AI about each sample incident and saves the answers."""
     for inc_id, service in WARMUP_TARGETS:
         try:
             events, used_sample = get_events(inc_id, None)
             result, source = investigate_core(inc_id, service, events, None, used_sample)
             print(f"--- WARMUP done for {inc_id} (source: {source}) ---")
         except Exception as e:
-            print(f"--- WARMUP failed for {inc_id}: {str(e)[:200]}")
+            print(f"--- WARMUP failed for {inc_id}: {str(e)[:200]} ---")
     print("--- WARMUP finished ---")
 
 
@@ -581,21 +669,11 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="TraceIQ API", version="1.1", lifespan=lifespan)
-
-
-# ---------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------
-@app.get("/health")
-def health():
-    """Used by the n8n health webhook."""
-    return {"status": "ok", "llm_configured": client is not None, "working_model": WORKING_MODEL}
+app = FastAPI(title="TraceIQ API", version="1.3", lifespan=lifespan)
 
 
 @app.get("/api/models")
 def list_models():
-    """Shows which models are being used right now."""
     if client is None:
         raise HTTPException(status_code=400, detail="No NVIDIA API key configured")
     return {
@@ -607,7 +685,6 @@ def list_models():
 
 @app.get("/api/timeline")
 def get_timeline(incident_id: str = "INC-001"):
-    """Returns the sorted chronological timeline events for a given incident."""
     data = load_incident_data(incident_id)
     sorted_events = sorted(data["timeline_events"], key=lambda x: x["timestamp"])
     return {
@@ -626,15 +703,13 @@ def run_investigation(request: IncidentRequest):
             request.incident_id, request.service, events, request.timestamp, used_sample
         )
 
-        # A new investigation means the incident is "open" again (clean rehearsals)
         reset_state(request.incident_id)
         LAST_ACTIONS[request.incident_id] = result.get("recommended_actions", [])
 
-        return {
+        response = {
             "incident_id": request.incident_id,
             "service": request.service,
             "source": source_val,
-            "model": WORKING_MODEL if source_val == "llm" else None,
             "status": "completed",
             "timestamp": request.timestamp,
             "timeline": events,
@@ -646,6 +721,30 @@ def run_investigation(request: IncidentRequest):
             "recommended_actions": result.get("recommended_actions", []),
         }
 
+        # Incident memory: recall BEFORE saving so an incident never matches itself.
+        # Any memory failure is swallowed so the investigation never breaks.
+        try:
+            root_cause = result.get("root_cause", "")
+            actions = result.get("recommended_actions", [])
+
+            similar = recall_similar(request.incident_id, request.service, root_cause)
+
+            if root_cause and actions:
+                save_incident(
+                    request.incident_id,
+                    request.service,
+                    root_cause,
+                    actions[0].get("action", ""),
+                )
+
+            if similar:
+                response["similar_past_incident"] = similar
+                response["memory_source"] = MEMORY_SOURCE
+        except Exception as mem_err:
+            print("--- MEMORY error (ignored):", str(mem_err)[:150])
+
+        return response
+
     except HTTPException:
         raise
     except Exception as e:
@@ -654,7 +753,6 @@ def run_investigation(request: IncidentRequest):
 
 @app.post("/api/remediate")
 def run_remediation(request: RemediateRequest):
-    """Simulates executing a fix action and updates the incident state."""
     inc_id = request.incident_id
 
     if inc_id not in incident_states:
@@ -685,7 +783,6 @@ def run_remediation(request: RemediateRequest):
 
 @app.post("/api/verify")
 def verify_incident(request: VerifyRequest):
-    """Returns before and after metrics and whether the incident is really resolved."""
     inc_id = request.incident_id
 
     initial = copy.deepcopy(INITIAL_STATES.get(inc_id, GENERIC_INITIAL))
@@ -708,10 +805,20 @@ def verify_incident(request: VerifyRequest):
 
 @app.post("/api/reset")
 def reset_all():
-    """Puts every incident back into its broken starting state (use between rehearsals)."""
     incident_states.clear()
     incident_states.update(copy.deepcopy(INITIAL_STATES))
     return {"status": "reset", "incidents": list(incident_states.keys())}
+
+
+@app.get("/api/memory")
+def show_memory():
+    records = list_incidents()
+    return {"memory_source": MEMORY_SOURCE, "count": len(records), "incidents": records}
+
+
+@app.post("/api/memory/clear")
+def wipe_memory():
+    return {"status": "cleared", "removed": clear_memory()}
 
 
 if __name__ == "__main__":
