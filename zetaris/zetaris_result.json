@@ -1,0 +1,10 @@
+{
+  "source": "zetaris",
+  "status": "prepared_not_run",
+  "executed": false,
+  "label": "Prepared, not run",
+  "purpose": "Count incidents per service across INC-001 to INC-004",
+  "sql": "SELECT service, COUNT(*) AS incident_count FROM incidents GROUP BY service ORDER BY incident_count DESC, service ASC;",
+  "rows": [],
+  "note": "Query prepared for Zetaris but not executed. Zetaris has no free access (paid, AWS-linked), so no results are shown."
+}
