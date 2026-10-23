@@ -1,0 +1,277 @@
+:root[data-theme='dark'] {
+    --bg: #1a1120;
+    --bg-panel: rgba(255, 255, 255, 0.06);
+    --bg-sidebar: rgba(255, 255, 255, 0.06);
+    --bg-hover: rgba(255, 143, 184, 0.16);
+    --border: rgba(255, 255, 255, 0.1);
+    --text: #e6d5df;
+    --text-h: #fff5fa;
+    --text-muted: #a68c9c;
+    --accent: #ff8fb8;
+    --accent-soft: rgba(255, 143, 184, 0.22);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+    --blur-tint: rgba(26, 17, 32, 0.62);
+    color-scheme: dark;
+  }
+  
+  :root {
+    --blur-tint: rgba(255, 245, 243, 0.55);
+  }
+  
+  /* Background glow */
+  :root[data-theme='dark'] body::before {
+    background:
+      radial-gradient(38% 38% at 18% 22%, rgba(214, 69, 127, 0.38), transparent 70%),
+      radial-gradient(36% 36% at 82% 18%, rgba(255, 150, 110, 0.2), transparent 70%),
+      radial-gradient(40% 40% at 74% 82%, rgba(53, 184, 166, 0.22), transparent 70%),
+      radial-gradient(34% 34% at 14% 86%, rgba(140, 100, 220, 0.25), transparent 70%),
+      radial-gradient(30% 30% at 50% 50%, rgba(255, 143, 184, 0.1), transparent 70%);
+  }
+  
+  :root[data-theme='dark'] body::after {
+    opacity: 0.6;
+  }
+  
+  /* Glass cards */
+  :root[data-theme='dark'] :is(.panel, .metric-card, .int-card, .rem-panel, .stat-card, .flow-step, .feature-card) {
+    border-color: rgba(255, 255, 255, 0.09);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 12px 32px rgba(0, 0, 0, 0.35);
+  }
+  
+  /* Soft surfaces (pills, chips, small cards, inputs) */
+  :root[data-theme='dark'] :is(
+      .btn:not(.btn-primary),
+      .search input,
+      .field select,
+      .log-search,
+      .log-select,
+      .nav-search input,
+      .nav-status,
+      .theme-toggle,
+      .ov-pill,
+      .ov-step,
+      .hero-pill,
+      .hero-tags li,
+      .sm-card,
+      .sm-pill,
+      .hyp-list li
+    ) {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--text-h);
+    box-shadow: 4px 4px 12px rgba(0, 0, 0, 0.3);
+  }
+  
+  :root[data-theme='dark'] .btn:hover:not(:disabled):not(.btn-primary) {
+    background: rgba(255, 255, 255, 0.14);
+  }
+  
+  :root[data-theme='dark'] .ov-step.is-on {
+    background: rgba(255, 143, 184, 0.2);
+    color: var(--text-h);
+  }
+  
+  /* Floating tooltips and chips */
+  :root[data-theme='dark'] :is(.float-card, .sat-chip, .sm-tip, .trend-tip, .mesh-tip) {
+    background: rgba(38, 26, 46, 0.92);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--text);
+  }
+  
+  :root[data-theme='dark'] .sm-box,
+  :root[data-theme='dark'] .mesh-box {
+    background: rgba(255, 255, 255, 0.04);
+  }
+  
+  :root[data-theme='dark'] :is(.confidence-bar, .sm-progress, .donut-track) {
+    background: rgba(255, 255, 255, 0.1);
+    stroke: rgba(255, 255, 255, 0.1);
+  }
+  
+  :root[data-theme='dark'] .is-idle .sm-dot {
+    fill: rgba(255, 255, 255, 0.1);
+    stroke: rgba(255, 255, 255, 0.35);
+  }
+  
+  :root[data-theme='dark'] .timeline-list li::before {
+    box-shadow: 0 0 0 3px rgba(26, 17, 32, 0.9);
+  }
+  
+  :root[data-theme='dark'] .nav-mark::after {
+    background: rgba(26, 17, 32, 0.85);
+  }
+
+  /* ---- Dark mode: rows, chips and action cards that were hardcoded light ---- */
+:root[data-theme='dark'] :is(
+  .ov-recent li,
+  .feed > *,
+  .plain-list > *,
+  .rem-panel li,
+  .rem-panel article,
+  .rem-panel [class*='action'],
+  .rem-panel [class*='item'],
+  .rem-panel [class*='card'],
+  .panel [class*='chip']:not(.badge),
+  .panel [class*='step']:not(.badge),
+  .panel [class*='event']:not(.badge),
+  .panel [class*='entry']:not(.badge),
+  .panel [class*='row']:not(.badge),
+  main [class*='feed'] > *,
+  main [class*='workflow'] span,
+  main [class*='flow'] span
+):not(.badge):not(.btn):not(button) {
+background: rgba(255, 255, 255, 0.07) !important;
+border-color: rgba(255, 255, 255, 0.12) !important;
+color: var(--text-h);
+box-shadow: none;
+}
+
+:root[data-theme='dark'] :is(.ov-recent li, .feed > *, .rem-panel li, .rem-panel article):hover {
+background: rgba(255, 143, 184, 0.14) !important;
+}
+
+/* Muted and small text inside those rows: make it readable */
+:root[data-theme='dark'] :is(.rem-panel, .feed, .ov-recent, main) :is(.muted, small, .kind-label, .rollback, [class*='rollback'], [class*='time']) {
+color: #c9b3c1;
+}
+
+/* Reject / secondary buttons inside the approval panel */
+:root[data-theme='dark'] :is(.rem-btn, .rem-panel button):not(.rem-btn-primary):not(.btn-primary) {
+background: rgba(255, 255, 255, 0.1);
+border: 1px solid rgba(255, 255, 255, 0.18);
+color: var(--text-h);
+}
+
+/* Risk and status badges: slightly brighter so they pop on dark */
+:root[data-theme='dark'] .badge {
+filter: brightness(1.25) saturate(1.1);
+}
+
+:root[data-theme='dark'] .nav-pill,
+:root[data-theme='dark'] .nav-search-btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #f5ecf1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+}
+
+:root[data-theme='dark'] .nav-search-btn kbd {
+  background: rgba(255, 255, 255, 0.14) !important;
+  color: #f5ecf1 !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+}
+
+:root[data-theme='dark'] .palette {
+  background: rgba(28, 18, 30, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #f5ecf1 !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55) !important;
+}
+
+:root[data-theme='dark'] .palette-input {
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #f5ecf1 !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+
+:root[data-theme='dark'] .palette-input::placeholder {
+  color: rgba(245, 236, 241, 0.55) !important;
+}
+
+:root[data-theme='dark'] .palette-item {
+  color: #f5ecf1 !important;
+}
+
+:root[data-theme='dark'] .palette-item strong {
+  color: #ffffff !important;
+}
+
+:root[data-theme='dark'] .palette-item .muted,
+:root[data-theme='dark'] .palette-empty,
+:root[data-theme='dark'] .palette-foot {
+  color: rgba(245, 236, 241, 0.65) !important;
+}
+
+:root[data-theme='dark'] .palette-group {
+  color: #ff9ec4 !important;
+}
+
+:root[data-theme='dark'] .palette-item.is-active {
+  background: rgba(255, 158, 196, 0.2) !important;
+}
+
+:root[data-theme='dark'] :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']) {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-h) !important;
+  caret-color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+:root[data-theme='dark'] :is(input, textarea)::placeholder {
+  color: #a68c9c;
+}
+
+:root[data-theme='dark'] select option {
+  background: #26192e;
+  color: #fff5fa;
+}
+
+/* the sign-in card itself still looks light in dark mode */
+:root[data-theme='dark'] :is([class*='signin'], [class*='sign-in'], [class*='auth'], [class*='profile'], [class*='popover'], [class*='menu']):not(button):not(input) {
+  color: var(--text);
+}
+/* Approve dialog in dark mode */
+:root[data-theme='dark'] .rem-dialog {
+  background: #2a1a33 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme='dark'] .rem-dialog :is(h4, p, label, strong) {
+  color: var(--text-h);
+}
+
+:root[data-theme='dark'] .rem-dialog .rem-muted {
+  color: #c9b3c1;
+}
+
+:root[data-theme='dark'] .rem-dialog .rem-btn:not(.rem-btn-primary) {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  color: var(--text-h) !important;
+}
+
+:root[data-theme='dark'] .rem-overlay {
+  background: rgba(10, 6, 14, 0.6);
+}
+/* Sign-in card in dark mode */
+:root[data-theme='dark'] :is(
+    [class*='signin'], [class*='sign-in'], [class*='login'], [class*='auth'],
+    [class*='profile'], [class*='account'], [class*='popover'], [class*='dropdown']
+  ):not(button):not(input):not(span):not(label):not(p) {
+  background: #2a1a33 !important;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--text-h);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+:root[data-theme='dark'] :is(
+    [class*='signin'], [class*='sign-in'], [class*='login'], [class*='auth'],
+    [class*='profile'], [class*='account'], [class*='popover'], [class*='dropdown']
+  ) :is(label, p, span, small, h2, h3, h4) {
+  color: #e6d5df;
+}
+
+/* Inputs: solid dark field, bright typed text, so they work on any card colour */
+:root[data-theme='dark'] :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']) {
+  background: #1a1120 !important;
+  color: #fff5fa !important;
+  -webkit-text-fill-color: #fff5fa;
+  caret-color: var(--accent-bright);
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+}
+
+:root[data-theme='dark'] :is(input, textarea)::placeholder {
+  color: #a68c9c;
+  -webkit-text-fill-color: #a68c9c;
+}

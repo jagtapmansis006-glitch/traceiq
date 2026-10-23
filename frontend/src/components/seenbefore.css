@@ -1,0 +1,14 @@
+.seen {
+    display: grid;
+    gap: 6px;
+    padding: 16px 20px;
+    border-left: 4px solid #a98bff;
+  }
+  
+  .seen h2 {
+    font-size: 1rem;
+  }
+  
+  .seen p {
+    font-size: 0.9rem;
+  }

@@ -1,0 +1,231 @@
+.stat-card {
+    padding: 18px 20px;
+    border-radius: 20px;
+    background: var(--bg-panel);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), var(--shadow);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 18px 40px rgba(214, 69, 127, 0.2);
+  }
+  
+  .stat-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  
+  .stat-glyph {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+    font-weight: 700;
+    animation: breathe 3s ease-in-out infinite;
+  }
+  
+  .tone-ok .stat-glyph { background: #35b8a6; }
+  .tone-bad .stat-glyph { background: #e0584a; }
+  .tone-info .stat-glyph { background: #6fa8ff; }
+  .tone-good .stat-glyph { background: #0d9467; }
+  
+  .stat-value {
+    margin-top: 8px;
+    font-size: 2.1rem;
+    font-weight: 650;
+    color: var(--text-h);
+    letter-spacing: -0.03em;
+  }
+  
+  .stat-value small {
+    font-size: 1.1rem;
+    margin-left: 2px;
+  }
+  
+  .stat-value em {
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(53, 184, 166, 0.18);
+    color: #0a7d72;
+    font-size: 0.72rem;
+    font-style: normal;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+  
+  .stat-hint {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+  
+  /* Trend chart */
+  .trend {
+    position: relative;
+  }
+  
+  .trend svg {
+    display: block;
+    width: 100%;
+  }
+  
+  .grid-line {
+    stroke: rgba(190, 120, 150, 0.16);
+    stroke-dasharray: 3 4;
+  }
+  
+  .axis-text {
+    font-size: 10px;
+    fill: var(--text-muted);
+  }
+  
+  .hover-line {
+    stroke: rgba(214, 69, 127, 0.4);
+    stroke-dasharray: 3 3;
+  }
+  
+  .trend-line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    animation: chart-draw 1.6s ease both;
+  }
+  
+  .area-fade {
+    animation: chart-fade 1.6s ease both;
+  }
+  
+  .trend-tip {
+    position: absolute;
+    top: 6px;
+    z-index: 3;
+    display: grid;
+    gap: 2px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 10px 26px rgba(214, 69, 127, 0.22);
+    font-size: 0.76rem;
+    transform: translateX(-50%);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  
+  .trend-legend,
+  .donut-legend li {
+    font-size: 0.78rem;
+  }
+  
+  .trend-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  
+  .trend-legend i,
+  .trend-tip i,
+  .donut-legend i {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 5px;
+    border-radius: 50%;
+  }
+  
+  /* Donut */
+  .donut {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+  }
+  
+  .donut-ring {
+    position: relative;
+    width: 150px;
+    height: 150px;
+  }
+  
+  .donut-track {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.7);
+    stroke-width: 5;
+  }
+  
+  .donut-seg {
+    fill: none;
+    stroke-width: 5;
+    cursor: pointer;
+    transition: stroke-width 0.2s ease;
+    animation: chart-fade 0.9s ease both;
+  }
+  
+  .donut-seg.is-hover {
+    stroke-width: 7;
+  }
+  
+  .donut-center {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    text-align: center;
+    pointer-events: none;
+  }
+  
+  .donut-center strong {
+    font-size: 1.7rem;
+    color: var(--text-h);
+  }
+  
+  .donut-center span {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+  }
+  
+  .donut-legend {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  
+  .donut-legend li {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: default;
+  }
+  
+  .donut-legend b {
+    margin-left: auto;
+    padding-left: 14px;
+    font-weight: 600;
+  }
+  
+  @keyframes chart-draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+  }
+  
+  @keyframes chart-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .stat-value {
+    font-variant-numeric: tabular-nums;
+  }
