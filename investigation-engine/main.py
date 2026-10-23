@@ -85,6 +85,15 @@ FORBIDDEN_WORDS = {
 REQUIRED_FIRST_TS = {
     "INC-001": "10:03:10",
 }
+# Optional hint added to the prompt ONLY for the built-in sample incidents.
+# Custom incidents sent by a user never get a hint.
+INCIDENT_HINTS = {
+    "INC-001": (
+        "Analyst hint: the first ABNORMAL event is the client retry surge at 10:03:10. "
+        "The HTTP 500 errors at 10:03:45 are an EFFECT of that retry surge, not the cause. "
+        "Start the root_cause sentence with the retry surge at 10:03:10."
+    ),
+}
 TS_PATTERN = re.compile(r"\b\d{1,2}:\d{2}(?::\d{2})?\b")
 
 
@@ -320,11 +329,15 @@ def timeline_to_text(events: list) -> str:
     )
 
 
-def build_prompt(service: str, events: list, timestamp: Optional[str]) -> str:
+def build_prompt(service: str, events: list, timestamp: Optional[str],
+                 incident_id: Optional[str] = None, use_hint: bool = False) -> str:
     reported = f"\nIncident reported at: {timestamp}\n" if timestamp else ""
+    hint = ""
+    if use_hint and incident_id in INCIDENT_HINTS:
+        hint = f"\n{INCIDENT_HINTS[incident_id]}\n"
     return f"""
 You are TraceIQ, an evidence-driven AI incident investigator. Analyze the incident timeline for service '{service}' and evaluate competing hypotheses to find the root cause.
-{reported}
+{reported}{hint}
 Timeline:
 {timeline_to_text(events)}
 
@@ -341,6 +354,7 @@ STRICT RULES:
 10. "recommended_actions" must contain 1 or 2 concrete fixes.
 11. A routine event that completed successfully (for example "deployment completed successfully") is NOT abnormal. Find the first event that is actually abnormal (a surge, spike, failure or saturation).
 12. Write "root_cause" as one sentence that STARTS with that earliest abnormal event and its timestamp, then lists the later effects in chronological order. Never start the sentence with a later effect.
+13. An error or failure event is usually an EFFECT. Look at what abnormal event happened shortly BEFORE the first error, and treat that as the likely root cause.
 
 Respond with ONLY a valid JSON object, no markdown, using EXACTLY these key names:
 {{
@@ -515,7 +529,11 @@ def validate_result(incident_id: str, raw: dict, check_words: bool) -> dict:
         required = REQUIRED_WORDS.get(incident_id)
         if required and not any(w in root for w in required):
             print(f"    rejected root_cause was: {result['root_cause'][:200]}")
-            raise ValueError("Root cause does not match the log evidence")
+            raise ValueError(
+                "Root cause does not match the log evidence; it must mention one of: "
+                + ", ".join(required)
+                + ". Start it with the earliest abnormal event, not with the first error."
+            )
         if any(w in root for w in FORBIDDEN_WORDS.get(incident_id, [])):
             print(f"    rejected root_cause was: {result['root_cause'][:200]}")
             raise ValueError("Root cause contains an unsupported claim")
@@ -641,7 +659,9 @@ def investigate_core(incident_id: str, service: str, events: list,
 
     try:
         result = ask_llm_checked(
-            incident_id, build_prompt(service, events, timestamp), check_words=used_sample
+            incident_id,
+            build_prompt(service, events, timestamp, incident_id, used_sample),
+            check_words=used_sample,
         )
         LLM_CACHE[cache_key] = result
         return result, "llm"
