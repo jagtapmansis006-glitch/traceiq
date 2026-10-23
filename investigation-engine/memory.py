@@ -1,13 +1,14 @@
-"""
+﻿"""
 TraceIQ incident memory.
-
-Inspired by H-MEM from Meterless (github.com/Meterless/Meterless, engines/hmem):
-a long-term memory of past incidents that is SAVED after each investigation and
-RECALLED when a similar incident comes in.
-
-HONESTY NOTE: the H-MEM reference implementation is TypeScript/Node.js, while this
-engine is Python. This module is therefore a simple JSON-file store in the same
-style, NOT the Meterless code. That is why memory_source is "local-memory".
+Primary store: the real Meterless H-MEM engine (github.com/Meterless/Meterless,
+engines/hmem), run as a small Node service (hmem-service) next to this engine.
+Past incidents are SAVED after each investigation and RECALLED when a similar
+incident comes in. Each save returns an H-MEM memory id that can be checked at
+the service's /audit endpoint.
+FALLBACK: if HMEM_URL is not set or the H-MEM service fails, this module uses a
+simple local JSON-file store instead. In that case memory_source is
+"local-memory". memory_source becomes "meterless-hmem" ONLY after a successful
+H-MEM call.
 """
 import json
 import os
@@ -55,7 +56,7 @@ def _tokens(text: str) -> set:
     return {w for w in words if len(w) > 2 and w not in STOPWORDS}
 
 
-def save_incident(incident_id: str, service: str, root_cause: str, fix: str) -> bool:
+def _save_local(incident_id: str, service: str, root_cause: str, fix: str) -> bool:
     """Stores one finished investigation as a long-term memory record."""
     try:
         record = {
@@ -76,7 +77,7 @@ def save_incident(incident_id: str, service: str, root_cause: str, fix: str) -> 
         return False
 
 
-def recall_similar(incident_id: str, service: str, root_cause: str):
+def _recall_local(incident_id: str, service: str, root_cause: str):
     """Returns the most similar PAST incident (same service or similar root cause), or None."""
     try:
         with _lock:
@@ -135,4 +136,58 @@ def clear_memory() -> int:
     with _lock:
         count = len(_load())
         _write([])
-    return count
+    return count# ---- Meterless H-MEM bridge -------------------------------------------------
+# If HMEM_URL is set, memory is stored and recalled by the real Meterless H-MEM
+# engine (hmem-service/). If that service is unreachable, fall back to the
+# local JSON store above so investigations never fail.
+import urllib.request
+HMEM_URL = os.getenv("HMEM_URL", "").rstrip("/")
+def _hmem_post(path: str, payload: dict, timeout: int = 5) -> dict:
+    req = urllib.request.Request(
+        HMEM_URL + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+def save_incident(incident_id: str, service: str, root_cause: str, fix: str) -> bool:
+    global MEMORY_SOURCE
+    if HMEM_URL:
+        try:
+            out = _hmem_post("/save", {
+                "incident_id": incident_id, "service": service,
+                "root_cause": root_cause, "fix": fix,
+            })
+            if out.get("saved"):
+                MEMORY_SOURCE = "meterless-hmem"
+                print(f"--- MEMORY (Meterless H-MEM) saved {incident_id} as {out.get('memory_id')} ---")
+                _save_local(incident_id, service, root_cause, fix)  # local copy for list_incidents
+                return True
+        except Exception as e:
+            print("--- MEMORY H-MEM save failed, using local:", str(e)[:150])
+    MEMORY_SOURCE = "local-memory"
+    return _save_local(incident_id, service, root_cause, fix)
+def recall_similar(incident_id: str, service: str, root_cause: str):
+    global MEMORY_SOURCE
+    if HMEM_URL:
+        try:
+            out = _hmem_post("/recall", {
+                "incident_id": incident_id, "service": service, "root_cause": root_cause,
+            })
+            MEMORY_SOURCE = "meterless-hmem"
+            m = out.get("match")
+            if not m:
+                return None
+            print(f"--- MEMORY (Meterless H-MEM) recalled {m['id']} as {m.get('memory_id')} ---")
+            return {
+                "id": m["id"],
+                "root_cause": m["root_cause"],
+                "fix": m["fix"],
+                "match_reason": m["match_reason"],
+                "memory_id": m.get("memory_id"),
+            }
+        except Exception as e:
+            print("--- MEMORY H-MEM recall failed, using local:", str(e)[:150])
+    MEMORY_SOURCE = "local-memory"
+    return _recall_local(incident_id, service, root_cause)

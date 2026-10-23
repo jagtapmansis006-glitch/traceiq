@@ -6,3 +6,11 @@ direct.json
 backup/
 body*.json
 investigation-engine/main_OLD.py
+
+hmem-service/node_modules
+hmem-service/vendor
+hmem-service/.traceiq-memory
+cloudflared.exe
+inc.json
+inc2.json
+recall.json

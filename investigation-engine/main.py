@@ -12,12 +12,12 @@ import threading
 from dotenv import load_dotenv
 from openai import OpenAI
 
+import memory as memory_module
 from memory import (
     save_incident,
     recall_similar,
     list_incidents,
     clear_memory,
-    MEMORY_SOURCE,
 )
 
 load_dotenv()
@@ -759,7 +759,7 @@ def run_investigation(request: IncidentRequest):
 
             if similar:
                 response["similar_past_incident"] = similar
-                response["memory_source"] = MEMORY_SOURCE
+                response["memory_source"] = memory_module.MEMORY_SOURCE
         except Exception as mem_err:
             print("--- MEMORY error (ignored):", str(mem_err)[:150])
 
@@ -833,7 +833,7 @@ def reset_all():
 @app.get("/api/memory")
 def show_memory():
     records = list_incidents()
-    return {"memory_source": MEMORY_SOURCE, "count": len(records), "incidents": records}
+    return {"memory_source": memory_module.MEMORY_SOURCE, "count": len(records), "incidents": records}
 
 
 @app.post("/api/memory/clear")

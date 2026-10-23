@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import './pages.css'
 
 interface Health {
@@ -40,7 +40,7 @@ export default function IntegrationsPage() {
 
   const backendBadge =
     state.phase === 'loading' ? (
-      <Badge kind="checking" label="Checking…" />
+      <Badge kind="checking" label="Checkingâ€¦" />
     ) : state.phase === 'error' ? (
       <Badge kind="unavailable" label="Unavailable" />
     ) : (
@@ -49,7 +49,7 @@ export default function IntegrationsPage() {
 
   const nemotronBadge =
     state.phase === 'loading' ? (
-      <Badge kind="checking" label="Checking…" />
+      <Badge kind="checking" label="Checkingâ€¦" />
     ) : state.phase === 'error' ? (
       <Badge kind="unavailable" label="Unavailable" />
     ) : state.health.llm_configured ? (

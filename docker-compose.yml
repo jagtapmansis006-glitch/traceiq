@@ -1,4 +1,4 @@
-﻿services:
+services:
   fastapi:
     build: ./investigation-engine
     ports:
@@ -6,9 +6,17 @@
     environment:
       - NVIDIA_API_KEY=${NVIDIA_API_KEY}
       - TRACEIQ_MEMORY_FILE=/data/memory_store.json
+      - HMEM_URL=http://hmem:8090
     volumes:
       - traceiq_memory:/data
-
+    depends_on:
+      - hmem
+  hmem:
+    build: ./hmem-service
+    ports:
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - hmem_data:/data
   n8n:
     image: n8nio/n8n:latest
     ports:
@@ -20,7 +28,7 @@
       - n8n_data:/home/node/.n8n
     depends_on:
       - fastapi
-
 volumes:
   n8n_data:
   traceiq_memory:
+  hmem_data:
