@@ -1,0 +1,49 @@
+{
+  "name": "traceiq-verify",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "traceiq-verify",
+        "responseMode": "responseNode",
+        "options": { "allowedOrigins": "*" }
+      },
+      "id": "v1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "traceiq-verify-hook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://fastapi:8000/api/verify",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ incident_id: $json.body.incident_id }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "v2",
+      "name": "Verify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": { "responseCode": 200 }
+      },
+      "id": "v3",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [480, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Verify", "type": "main", "index": 0 }]] },
+    "Verify": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+  }
+}

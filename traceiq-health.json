@@ -23,7 +23,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "http://fastapi:8000/health",
+        "url": "http://fastapi:8000/api/models",
         "options": {
           "timeout": 5000
         }

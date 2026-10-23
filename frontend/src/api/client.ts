@@ -121,8 +121,10 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 }
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  const r = await request<{ working_model?: string | null }>('/api/models', { timeoutMs: 4_000, signal })
-  return { status: 'ok', llm_configured: Boolean(r.working_model), working_model: r.working_model ?? null }
+  const raw = await request<unknown>('/webhook/traceiq-health', { timeoutMs: 4_000, signal })
+  const r = (Array.isArray(raw) ? raw[0] : raw) as { engine?: string }
+  const up = r?.engine === 'up'
+  return { status: up ? 'ok' : 'down', llm_configured: up, working_model: null }
 }
 
 export function getTimeline(incidentId: string, signal?: AbortSignal) {
