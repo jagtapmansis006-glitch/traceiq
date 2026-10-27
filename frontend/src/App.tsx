@@ -4,15 +4,17 @@ import CommandPalette from './components/CommandPalette'
 import ErrorBoundary from './components/ErrorBoundary'
 import Overview from './components/Overview'
 import HomePage from './pages/HomePage'
+import HowItWorksPage from './pages/HowItWorksPage'
 import IncidentsPage from './pages/IncidentsPage'
 import InvestigationPage from './pages/InvestigationPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 import AgentActivityPage from './pages/AgentActivityPage'
 import ServicesPage from './pages/ServicesPage'
 import LogsPage from './pages/LogsPage'
+import NotFoundPage from './pages/NotFoundPage'
 import SettingsPage from './pages/SettingsPage'
 import { updateProfile, useProfile } from './profile'
-import type { View } from './nav'
+import { hashForView, viewFromHash, type View } from './nav'
 import { ClickSpark } from './components/bits'
 import './App.css'
 import './theme.css'
@@ -25,14 +27,18 @@ import { usePrefs } from './prefs'
 
 function App() {
   const { animations } = useProfile()
-  const [view, setView] = useState<View>('Home')
+  const [view, setView] = useState<View>(() => viewFromHash(window.location.hash))
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [request, setRequest] = useState<{ id: string; service: string; n: number } | null>(null)
   const prefs = usePrefs()
+  const go = useCallback((next: View) => {
+    if (next !== 'NotFound') window.location.hash = hashForView(next)
+    setView(next)
+  }, [])
   const investigate = useCallback((id: string, service: string) => {
     setRequest({ id, service, n: Date.now() })
-    setView('Investigation')
-  }, [])
+    go('Investigation')
+  }, [go])
 
   useEffect(() => {
     document.documentElement.dataset.motion = animations ? 'on' : 'off'
@@ -49,6 +55,13 @@ function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  useEffect(() => {
+    const sync = () => setView(viewFromHash(window.location.hash))
+    sync()
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+
   const signOut = useCallback(() => {
     updateProfile({ name: '', signedIn: false })
   }, [])
@@ -61,7 +74,7 @@ function App() {
         <NavBlur />
         <TopNav
           active={view}
-          onNavigate={setView}
+          onNavigate={go}
           onOpenSearch={() => setPaletteOpen(true)}
           onSignOut={signOut}
         />
@@ -69,8 +82,8 @@ function App() {
           <ErrorBoundary key={view}>
             {view === 'Home' ? (
               <HomePage
-                onOpenDashboard={() => setView('Overview')}
-                onInvestigate={() => setView('Investigation')}
+                onOpenDashboard={() => go('Overview')}
+                onInvestigate={() => go('Investigation')}
               />
             ) : null}
             {view === 'Overview' ? <Overview /> : null}
@@ -81,16 +94,18 @@ function App() {
             {view === 'Services' ? <ServicesPage /> : null}
             {view === 'Logs' ? <LogsPage /> : null}
             {view === 'Agent Activity' ? (
-              <AgentActivityPage onInvestigate={() => setView('Investigation')} />
+              <AgentActivityPage onInvestigate={() => go('Investigation')} />
             ) : null}
             {view === 'Integrations' ? <IntegrationsPage /> : null}
             {view === 'Settings' ? <SettingsPage onSignOut={signOut} /> : null}
+            {view === 'How it works' ? <HowItWorksPage /> : null}
+            {view === 'NotFound' ? <NotFoundPage onHome={() => go('Home')} /> : null}
           </ErrorBoundary>
         </main>
         <CommandPalette
           open={paletteOpen}
           onClose={() => setPaletteOpen(false)}
-          onNavigate={setView}
+          onNavigate={go}
           onSignOut={signOut}
         />
       </div>

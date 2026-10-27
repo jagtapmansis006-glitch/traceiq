@@ -18,7 +18,7 @@ function PaletteBody({ onClose, onNavigate, onSignOut }: Omit<Props, 'open'>) {
   const { animations } = useProfile()
 
   const commands = useMemo<Command[]>(() => {
-    const pages: View[] = ['Home', ...NAV_ITEMS]
+    const pages: Array<Exclude<View, 'NotFound'>> = ['Home', ...NAV_ITEMS]
     return [
       ...pages.map((v) => ({
         id: `go-${v}`,
