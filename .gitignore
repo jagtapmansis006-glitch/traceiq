@@ -14,3 +14,9 @@ cloudflared.exe
 inc.json
 inc2.json
 recall.json
+
+.env
+*.env
+zetaris-platform/
+node_modules/
+__pycache__/
