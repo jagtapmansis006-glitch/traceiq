@@ -157,8 +157,8 @@ sequenceDiagram
 
 ```bash
 # 1. Clone
-git clone [REPO URL]
-cd [REPO NAME]
+git clone https://github.com/jagtapmansis006-glitch/traceiq.git
+cd traceiq
 
 # 2. Configure (add your own keys)
 cp .env.example .env
@@ -277,3 +277,4 @@ No API keys or secrets are committed. All credentials load from `.env`, which is
 *Sponsors: Zetaris · NVIDIA · Meterless · Cursor*
 
 </div>
+
