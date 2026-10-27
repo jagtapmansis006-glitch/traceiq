@@ -17,7 +17,7 @@
 ![Meterless](https://img.shields.io/badge/Meterless-H--MEM-8A2BE2)
 ![Zetaris](https://img.shields.io/badge/Zetaris-prepared-00A3E0)
 
-### [🎥 Watch the demo]([PASTE VIDEO LINK]) &nbsp;|&nbsp; [🚀 Quick start](#-quick-start) &nbsp;|&nbsp; [🏗 Architecture](#-architecture) &nbsp;|&nbsp; [🤝 Sponsors](#-sponsor-technologies)
+
 
 </div>
 
@@ -54,19 +54,7 @@ TraceIQ behaves like a senior SRE who never forgets an incident:
 | 5️⃣ | **Approve**: a human approves or rejects the fix (the agent never acts alone) |
 | 6️⃣ | **Remediate and verify**: the fix runs and the agent confirms the incident is resolved |
 
----
 
-## 🎬 Demo
-
-> 📺 **Full walkthrough (2 min):** [PASTE VIDEO LINK]
-
-| Dashboard | Root cause and evidence | Approve and verify |
-|:---:|:---:|:---:|
-| ![dashboard](docs/screenshots/dashboard.png) | ![root cause](docs/screenshots/root-cause.png) | ![verify](docs/screenshots/verify.png) |
-
-*(Add your screenshots to `docs/screenshots/` using these names, or edit the paths.)*
-
----
 
 ## 🏗 Architecture
 
